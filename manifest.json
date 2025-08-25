@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "better-link-clicker-plugin",
+	"name": "Better Link Clicker",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Changes link click behavior to edit on click and navigate on Ctrl+Click",
+	"author": "Eniverz",
+	"authorUrl": "https://eniverz.github.io/profile",
 	"isDesktopOnly": false
 }
