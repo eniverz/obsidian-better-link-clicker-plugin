@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { Plugin, MarkdownView, EditorPosition, TFile } from "obsidian";
 import { BLCSettings, DEFAULT_SETTINGS, MySettingTab } from "./settings";
 import { ConfirmationModal } from "./modal";
 
@@ -7,7 +7,6 @@ export default class MyPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
-
 		this.addSettingTab(new MySettingTab(this.app, this));
 
 		this.registerDomEvent(
@@ -31,68 +30,133 @@ export default class MyPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-	private async createConfirm(evt: MouseEvent, unresolved: HTMLSpanElement) {
-		evt.preventDefault();
-		evt.stopPropagation();
-
-		const path = `${unresolved.innerText.split("#")[0]}.md`;
-		new ConfirmationModal(this.app, path, () => {
-			this.createAndOpenNote(path);
-		}).open();
-	}
-
 	private async handleLinkClick(evt: MouseEvent) {
-		const linkSpan = (evt.target as HTMLElement).closest(
-			"span.cm-hmd-internal-link",
-		);
-
-		if (!linkSpan) {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		if (!view || !view.file) {
 			return;
 		}
 
-		const unresolved = linkSpan.querySelector("span.is-unresolved");
-		const isMacOS = process.platform === "darwin";
-		const isModifier = isMacOS ? evt.metaKey : evt.ctrlKey;
+		const editor = view.editor;
 
-		if (!this.settings.jumpOnlyWithModifier) {
-			if (unresolved && this.settings.confirmCreateFile) {
-				await this.createConfirm(evt, unresolved as HTMLSpanElement);
+		const cm = (editor as any).cm;
+		if (!cm) return;
+
+		const offset = cm.posAtCoords({ x: evt.clientX, y: evt.clientY });
+		if (offset === null) {
+			return;
+		}
+
+		const pos: EditorPosition = editor.offsetToPos(offset);
+
+		const fileCache = this.app.metadataCache.getFileCache(view.file);
+		if (!fileCache?.links && !fileCache?.embeds) {
+			return;
+		}
+
+		for (const linkCache of [
+			...(fileCache.links || []),
+			...(fileCache.embeds || []),
+		]) {
+			const start = linkCache.position.start;
+			const end = linkCache.position.end;
+
+			const isSameLine = pos.line === start.line;
+			if (
+				(pos.line > start.line && pos.line < end.line) ||
+				(isSameLine && pos.ch >= start.col && pos.ch <= end.col)
+			) {
+				this.processLink(evt, linkCache.link, view.file.path);
 				return;
 			}
-			return;
 		}
 
-		if (unresolved && isModifier) {
-			if (this.settings.confirmCreateFile) {
-				await this.createConfirm(evt, unresolved as HTMLSpanElement);
-			}
+		if (!(evt.target as HTMLElement).hasClass("internal-embed")) {
 			return;
 		}
-
-		const targetLink = linkSpan.querySelector("a");
-
-		if (!targetLink) {
-			return;
-		}
-
-		if (!isModifier) {
-			evt.preventDefault();
-			evt.stopPropagation();
-			return;
+		const div = evt.target as HTMLDivElement;
+		const src = div.getAttribute("src");
+		if (src) {
+			this.processLink(evt, src, view.file.path, true);
 		}
 	}
 
-	private async createAndOpenNote(path: string) {
-		try {
-			const newFile = await this.app.vault.create(path, "");
+	private async processLink(
+		evt: MouseEvent,
+		link: string,
+		filepath: string,
+		isEmbed: boolean = false,
+	) {
+		const linkTarget = link.split("|")[0].split("#")[0];
 
-			const newLeaf = this.app.workspace.getLeaf("tab");
-			await newLeaf.openFile(newFile);
-		} catch (error) {
-			console.error(
-				`Error creating or opening note at path: ${path}`,
-				error,
-			);
+		const targetFile: TFile | null =
+			this.app.metadataCache.getFirstLinkpathDest(linkTarget, filepath);
+		const isUnresolved = targetFile === null;
+		const isMacOS = process.platform === "darwin";
+		const canJump =
+			!this.settings.jumpOnlyWithModifier !==
+			(isMacOS ? evt.metaKey : evt.ctrlKey);
+
+		if (isUnresolved) {
+			if (canJump) {
+				if (this.settings.confirmCreateFile) {
+					evt.preventDefault();
+					evt.stopPropagation();
+
+					const path = `${linkTarget}.md`;
+					new ConfirmationModal(this.app, path, async () => {
+						try {
+							const newFile = await this.app.vault.create(
+								path,
+								"",
+							);
+							const newLeaf = this.app.workspace.getLeaf("tab");
+							await newLeaf.openFile(newFile);
+						} catch (error) {
+							console.error(
+								`Error creating or opening note at path: ${path}`,
+								error,
+							);
+						}
+					}).open();
+				}
+			} else {
+				evt.preventDefault();
+				evt.stopPropagation();
+
+				if (isEmbed) {
+					const view =
+						this.app.workspace.getActiveViewOfType(MarkdownView);
+					if (!view || !view.file) {
+						return;
+					}
+					const state = view.getState();
+					const liveMode = state.mode === "source" && !state.source;
+					if (!liveMode) {
+						return;
+					}
+					const embed = this.app.metadataCache
+						.getFileCache(view.file)
+						?.embeds?.find((e) => {
+							return (
+								e.link.split("|")[0].split("#")[0] ===
+								linkTarget
+							);
+						});
+					if (embed) {
+						view.editor.setCursor({
+							line: embed.position.start.line,
+							ch: embed.position.start.col + 3,
+						});
+						view.editor.focus();
+					}
+				}
+			}
+			return;
+		} else {
+			if (!canJump) {
+				evt.preventDefault();
+				evt.stopPropagation();
+			}
 		}
 	}
 }
