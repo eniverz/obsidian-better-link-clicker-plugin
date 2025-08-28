@@ -4,10 +4,12 @@ import BetterLinkClicker from "./main";
 export interface BLCSettings {
 	jumpOnlyWithModifier: boolean;
 	confirmCreateFile: boolean;
+	openAtNewTab: boolean;
 }
 export const DEFAULT_SETTINGS: BLCSettings = {
 	jumpOnlyWithModifier: true,
 	confirmCreateFile: true,
+	openAtNewTab: false,
 };
 
 export class BLCSettingTab extends PluginSettingTab {
@@ -49,6 +51,20 @@ export class BLCSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.confirmCreateFile)
 					.onChange(async (value) => {
 						this.plugin.settings.confirmCreateFile = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName("Open link at new tab")
+			.setDesc(
+				"If enabled, the note will open in a new tab instead of the current one when you Ctrl/Cmd-click a link.",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.openAtNewTab)
+					.onChange(async (value) => {
+						this.plugin.settings.openAtNewTab = value;
 						await this.plugin.saveSettings();
 					}),
 			);

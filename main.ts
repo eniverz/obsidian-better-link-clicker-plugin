@@ -86,6 +86,8 @@ export default class BetterLinkClicker extends Plugin {
 		filepath: string,
 		isEmbed: boolean = false,
 	) {
+		evt.preventDefault();
+		evt.stopPropagation();
 		const linkTarget = link.split("|")[0].split("#")[0];
 
 		const targetFile: TFile | null =
@@ -98,9 +100,6 @@ export default class BetterLinkClicker extends Plugin {
 		if (isUnresolved) {
 			if (canJump) {
 				if (this.settings.confirmCreateFile) {
-					evt.preventDefault();
-					evt.stopPropagation();
-
 					let newFileLocation = "";
 					const config = (this.app.vault as any).config as any;
 					switch (config.newFileLocation) {
@@ -134,9 +133,6 @@ export default class BetterLinkClicker extends Plugin {
 					}).open();
 				}
 			} else {
-				evt.preventDefault();
-				evt.stopPropagation();
-
 				if (isEmbed) {
 					const view =
 						this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -167,9 +163,8 @@ export default class BetterLinkClicker extends Plugin {
 			}
 			return;
 		} else {
-			if (!canJump) {
-				evt.preventDefault();
-				evt.stopPropagation();
+			if (canJump) {
+				this.app.workspace.openLinkText(link, filepath, this.settings.openAtNewTab);
 			}
 		}
 	}
