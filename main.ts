@@ -1,13 +1,13 @@
-import { Plugin, MarkdownView, EditorPosition, TFile } from "obsidian";
-import { BLCSettings, DEFAULT_SETTINGS, MySettingTab } from "./settings";
+import { Plugin, MarkdownView, EditorPosition, TFile, Platform } from "obsidian";
+import { BLCSettings, DEFAULT_SETTINGS, BLCSettingTab } from "./settings";
 import { ConfirmationModal } from "./modal";
 
-export default class MyPlugin extends Plugin {
+export default class BetterLinkClicker extends Plugin {
 	settings: BLCSettings;
 
 	async onload() {
 		await this.loadSettings();
-		this.addSettingTab(new MySettingTab(this.app, this));
+		this.addSettingTab(new BLCSettingTab(this.app, this));
 
 		this.registerDomEvent(
 			document,
@@ -91,10 +91,9 @@ export default class MyPlugin extends Plugin {
 		const targetFile: TFile | null =
 			this.app.metadataCache.getFirstLinkpathDest(linkTarget, filepath);
 		const isUnresolved = targetFile === null;
-		const isMacOS = process.platform === "darwin";
 		const canJump =
 			!this.settings.jumpOnlyWithModifier !==
-			(isMacOS ? evt.metaKey : evt.ctrlKey);
+			(Platform.isMacOS ? evt.metaKey : evt.ctrlKey);
 
 		if (isUnresolved) {
 			if (canJump) {

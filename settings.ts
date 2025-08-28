@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import MyPlugin from "./main";
+import BetterLinkClicker from "./main";
 
 export interface BLCSettings {
 	jumpOnlyWithModifier: boolean;
@@ -10,10 +10,10 @@ export const DEFAULT_SETTINGS: BLCSettings = {
 	confirmCreateFile: true,
 };
 
-export class MySettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+export class BLCSettingTab extends PluginSettingTab {
+	plugin: BetterLinkClicker;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: BetterLinkClicker) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
