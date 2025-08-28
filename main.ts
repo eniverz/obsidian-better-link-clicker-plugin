@@ -101,7 +101,22 @@ export default class BetterLinkClicker extends Plugin {
 					evt.preventDefault();
 					evt.stopPropagation();
 
-					const path = `${linkTarget}.md`;
+					let newFileLocation = "";
+					const config = (this.app.vault as any).config as any;
+					switch (config.newFileLocation) {
+						case "root":
+							newFileLocation = "";
+							break;
+						case "current":
+							newFileLocation = filepath.split("/").slice(0, -1).join("/") + "/";
+							break;
+						case "folder":
+							newFileLocation = config.newFileFolderPath + "/";
+							break;
+						default:
+							break;
+					}
+					const path = `${newFileLocation}${linkTarget}.md`;
 					new ConfirmationModal(this.app, path, async () => {
 						try {
 							const newFile = await this.app.vault.create(
