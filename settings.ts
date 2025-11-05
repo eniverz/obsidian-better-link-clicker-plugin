@@ -25,12 +25,11 @@ export class BLCSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Link Click Behavior Settings" });
-
 		new Setting(containerEl)
 			.setName("Jump only with modifier")
+			.setHeading()
 			.setDesc(
-				"If enabled, you need to hold Ctrl (or Cmd on Mac) while clicking a link to jump to it. Otherwise, clicking a link will open it in a new pane.",
+				"If enabled, you need to hold ctrl (or cmd on mac) while clicking a link to jump to it. Otherwise, clicking a link will open it in a new pane.",
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -44,7 +43,7 @@ export class BLCSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Confirm file creation")
 			.setDesc(
-				"If enabled, a dialog will pop up to confirm creating a new note when you Ctrl/Cmd-click a link to a non-existent note.",
+				"If enabled, a dialog will pop up to confirm creating a new note when you ctrl/cmd-click a link to a non-existent note.",
 			)
 			.addToggle((toggle) =>
 				toggle
@@ -58,7 +57,7 @@ export class BLCSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Open link at new tab")
 			.setDesc(
-				"If enabled, the note will open in a new tab instead of the current one when you Ctrl/Cmd-click a link.",
+				"If enabled, the note will open in a new tab instead of the current one when you ctrl/cmd-click a link.",
 			)
 			.addToggle((toggle) =>
 				toggle
