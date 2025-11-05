@@ -1,6 +1,44 @@
-import { Plugin, MarkdownView, EditorPosition, TFile, Platform } from "obsidian";
+import {
+	Plugin,
+	MarkdownView,
+	EditorPosition,
+	TFile,
+	Platform,
+	Editor,
+	Vault,
+} from "obsidian";
 import { BLCSettings, DEFAULT_SETTINGS, BLCSettingTab } from "./settings";
 import { ConfirmationModal } from "./modal";
+
+type PosAtCoordsFn = (
+	coords: { x: number; y: number },
+	bias?: number,
+) => number | null;
+
+type EditorWithPosAtCoords = Editor & {
+	cm?: {
+		posAtCoords: PosAtCoordsFn;
+	};
+};
+
+const hasPosAtCoords = (
+	editor: Editor,
+): editor is EditorWithPosAtCoords => {
+	const cm = (editor as EditorWithPosAtCoords).cm;
+	return typeof cm?.posAtCoords === "function";
+};
+
+type VaultWithConfig = Vault & {
+	config: {
+		newFileLocation?: string;
+		newFileFolderPath?: string;
+	};
+};
+
+const hasVaultConfig = (vault: Vault): vault is VaultWithConfig => {
+	const config = (vault as VaultWithConfig).config;
+	return typeof config === "object" && config !== null;
+};
 
 export default class BetterLinkClicker extends Plugin {
 	settings: BLCSettings;
@@ -15,7 +53,7 @@ export default class BetterLinkClicker extends Plugin {
 			this.handleLinkClick.bind(this),
 			{ capture: true },
 		);
-		console.log("Better Link Clicker loaded");
+		console.debug("Better Link Clicker loaded");
 	}
 
 	async loadSettings() {
@@ -38,7 +76,11 @@ export default class BetterLinkClicker extends Plugin {
 
 		const editor = view.editor;
 
-		const cm = (editor as any).cm;
+		if (!hasPosAtCoords(editor)) {
+			return;
+		}
+
+		const cm = editor.cm;
 		if (!cm) return;
 
 		const offset = cm.posAtCoords({ x: evt.clientX, y: evt.clientY });
@@ -65,7 +107,7 @@ export default class BetterLinkClicker extends Plugin {
 				(pos.line > start.line && pos.line < end.line) ||
 				(isSameLine && pos.ch >= start.col && pos.ch <= end.col)
 			) {
-				this.processLink(evt, linkCache.link, view.file.path);
+				await this.processLink(evt, linkCache.link, view.file.path);
 				return;
 			}
 		}
@@ -76,7 +118,7 @@ export default class BetterLinkClicker extends Plugin {
 		const div = evt.target as HTMLDivElement;
 		const src = div.getAttribute("src");
 		if (src) {
-			this.processLink(evt, src, view.file.path, true);
+			await this.processLink(evt, src, view.file.path, true);
 		}
 	}
 
@@ -101,7 +143,11 @@ export default class BetterLinkClicker extends Plugin {
 			if (canJump) {
 				if (this.settings.confirmCreateFile) {
 					let newFileLocation = "";
-					const config = (this.app.vault as any).config as any;
+					const vault = this.app.vault;
+					if (!hasVaultConfig(vault)) {
+						return;
+					}
+					const config = vault.config;
 					switch (config.newFileLocation) {
 						case "root":
 							newFileLocation = "";
@@ -116,20 +162,19 @@ export default class BetterLinkClicker extends Plugin {
 							break;
 					}
 					const path = `${newFileLocation}${linkTarget}.md`;
-					new ConfirmationModal(this.app, path, async () => {
-						try {
-							const newFile = await this.app.vault.create(
-								path,
-								"",
-							);
+					new ConfirmationModal(this.app, path, () => {
+						this.app.vault.create(
+							path,
+							"",
+						).then(async (newFile) => {
 							const newLeaf = this.app.workspace.getLeaf("tab");
 							await newLeaf.openFile(newFile);
-						} catch (error) {
+						}).catch((error) => {
 							console.error(
 								`Error creating or opening note at path: ${path}`,
 								error,
 							);
-						}
+						});
 					}).open();
 				}
 			} else {
@@ -161,10 +206,9 @@ export default class BetterLinkClicker extends Plugin {
 					}
 				}
 			}
-			return;
 		} else {
 			if (canJump) {
-				this.app.workspace.openLinkText(link, filepath, this.settings.openAtNewTab);
+				await this.app.workspace.openLinkText(link, filepath, this.settings.openAtNewTab);
 			}
 		}
 	}
