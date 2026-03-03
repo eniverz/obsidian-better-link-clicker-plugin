@@ -1,8 +1,8 @@
 {
 	"id": "better-link-clicker",
 	"name": "Better Link Clicker",
-	"version": "1.1.0",
-	"minAppVersion": "0.15.0",
+	"version": "1.2.0",
+	"minAppVersion": "1.12.4",
 	"description": "Changes link click behavior to edit on click and navigate on Ctrl+Click.",
 	"author": "Eniverz",
 	"authorUrl": "https://eniverz.github.io/profile",

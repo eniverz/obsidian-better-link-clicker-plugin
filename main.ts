@@ -7,6 +7,7 @@ import {
 	Keymap,
 	Editor,
 	Vault,
+	PaneType,
 } from "obsidian";
 import { BLCSettings, DEFAULT_SETTINGS, BLCSettingTab } from "./settings";
 import { ConfirmationModal } from "./modal";
@@ -19,6 +20,20 @@ type PosAtCoordsFn = (
 type EditorWithPosAtCoords = Editor & {
 	cm?: {
 		posAtCoords: PosAtCoordsFn;
+	};
+};
+
+type CachePos = {
+	line: number;
+	col: number;
+};
+
+type ClickedLinkCache = {
+	link: string;
+	original: string;
+	position: {
+		start: CachePos;
+		end: CachePos;
 	};
 };
 
@@ -96,10 +111,12 @@ export default class BetterLinkClicker extends Plugin {
 			return;
 		}
 
-		for (const linkCache of [
-			...(fileCache.links || []),
-			...(fileCache.embeds || []),
-		]) {
+		const linkCaches: ClickedLinkCache[] = [
+			...((fileCache.links || []) as ClickedLinkCache[]),
+			...((fileCache.embeds || []) as ClickedLinkCache[]),
+		];
+
+		for (const linkCache of linkCaches) {
 			const start = linkCache.position.start;
 			const end = linkCache.position.end;
 
@@ -108,116 +125,154 @@ export default class BetterLinkClicker extends Plugin {
 				(pos.line > start.line && pos.line < end.line) ||
 				(isSameLine && pos.ch >= start.col && pos.ch <= end.col)
 			) {
-				await this.processLink(evt, linkCache.link, view.file.path);
+				const state = view.getState();
+				const isLivePreview = state.mode === "source" && !state.source;
+				await this.processLink(
+					evt,
+					linkCache,
+					view.file.path,
+					view.editor,
+					isLivePreview,
+				);
 				return;
 			}
-		}
-
-		if (!(evt.target as HTMLElement).hasClass("internal-embed")) {
-			return;
-		}
-		const div = evt.target as HTMLDivElement;
-		const src = div.getAttribute("src");
-		if (src) {
-			await this.processLink(evt, src, view.file.path, true);
 		}
 	}
 
 	private async processLink(
 		evt: MouseEvent,
-		link: string,
+		clickedLink: ClickedLinkCache,
 		filepath: string,
-		isEmbed: boolean = false,
+		editor: Editor,
+		isLivePreview: boolean,
 	) {
 		const modEvent = Keymap.isModEvent(evt);
-		const paneType = typeof modEvent === "string" ? modEvent : null;
+		const paneType =
+			typeof modEvent === "string" ? (modEvent as PaneType) : undefined;
 		const openTarget = paneType ?? this.settings.openAtNewTab;
-
-		evt.preventDefault();
-		evt.stopPropagation();
-		const linkTarget = link.split("|")[0].split("#")[0];
-
-		const targetFile: TFile | null =
-			this.app.metadataCache.getFirstLinkpathDest(linkTarget, filepath);
-		const isUnresolved = targetFile === null;
 		const forceJumpForWindow = paneType === "window";
 		const canJump =
 			forceJumpForWindow ||
 			!this.settings.jumpOnlyWithModifier !==
 			(Platform.isMacOS ? evt.metaKey : evt.ctrlKey);
 
-		if (isUnresolved) {
-			if (canJump) {
-				if (this.settings.confirmCreateFile) {
-					let newFileLocation = "";
-					const vault = this.app.vault;
-					if (!hasVaultConfig(vault)) {
-						return;
-					}
-					const config = vault.config;
-					switch (config.newFileLocation) {
-						case "root":
-							newFileLocation = "";
-							break;
-						case "current":
-							newFileLocation = filepath.split("/").slice(0, -1).join("/") + "/";
-							break;
-						case "folder":
-							newFileLocation = config.newFileFolderPath + "/";
-							break;
-						default:
-							break;
-					}
-					const path = `${newFileLocation}${linkTarget}.md`;
-					const leafTypeForNewFile = paneType ?? "tab";
-					new ConfirmationModal(this.app, path, () => {
-						this.app.vault.create(
-							path,
-							"",
-						).then(async (newFile) => {
-							const newLeaf = this.app.workspace.getLeaf(leafTypeForNewFile);
-							await newLeaf.openFile(newFile);
-						}).catch((error) => {
-							console.error(
-								`Error creating or opening note at path: ${path}`,
-								error,
-							);
-						});
-					}).open();
-				}
-			} else {
-				if (isEmbed) {
-					const view =
-						this.app.workspace.getActiveViewOfType(MarkdownView);
-					if (!view || !view.file) {
-						return;
-					}
-					const state = view.getState();
-					const liveMode = state.mode === "source" && !state.source;
-					if (!liveMode) {
-						return;
-					}
-					const embed = this.app.metadataCache
-						.getFileCache(view.file)
-						?.embeds?.find((e) => {
-							return (
-								e.link.split("|")[0].split("#")[0] ===
-								linkTarget
-							);
-						});
-					if (embed) {
-						view.editor.setCursor({
-							line: embed.position.start.line,
-							ch: embed.position.start.col + 3,
-						});
-						view.editor.focus();
-					}
-				}
-			}
-		} else {
-			if (canJump) {
-				await this.app.workspace.openLinkText(link, filepath, openTarget);
-			}
+		evt.preventDefault();
+		evt.stopPropagation();
+
+		if (isLivePreview && this.isCursorInsideLink(editor, clickedLink)) {
+			// this.moveCursorToLinkStart(editor, clickedLink);
+			return;
 		}
+
+		if (!canJump) {
+			this.moveCursorToLinkStart(editor, clickedLink);
+			return;
+		}
+
+		const linkTarget = clickedLink.link.split("|")[0].split("#")[0];
+
+		const targetFile: TFile | null =
+			this.app.metadataCache.getFirstLinkpathDest(linkTarget, filepath);
+
+		if (targetFile) {
+			await this.app.workspace.openLinkText(
+				clickedLink.link,
+				filepath,
+				openTarget,
+			);
+			return;
+		}
+
+		const createPath = this.buildNewFilePath(filepath, linkTarget);
+		if (!createPath) {
+			return;
+		}
+
+		if (this.settings.confirmCreateFile) {
+			new ConfirmationModal(this.app, createPath, () => {
+				void this.createAndOpenFile(createPath, paneType);
+			}).open();
+			return;
+		}
+
+		await this.createAndOpenFile(createPath, paneType);
+	}
+
+	private buildNewFilePath(filepath: string, linkTarget: string): string | null {
+		const vault = this.app.vault;
+		if (!hasVaultConfig(vault)) {
+			return null;
+		}
+
+		let newFileLocation = "";
+		const config = vault.config;
+		switch (config.newFileLocation) {
+			case "root":
+				newFileLocation = "";
+				break;
+			case "current":
+				newFileLocation = filepath.split("/").slice(0, -1).join("/") + "/";
+				break;
+			case "folder":
+				newFileLocation = config.newFileFolderPath
+					? `${config.newFileFolderPath}/`
+					: "";
+				break;
+			default:
+				break;
+		}
+
+		return `${newFileLocation}${linkTarget}.md`;
+	}
+
+	private async createAndOpenFile(path: string, paneType?: PaneType) {
+		const leafTypeForNewFile = paneType ?? "tab";
+		try {
+			const newFile = await this.app.vault.create(path, "");
+			const newLeaf = this.app.workspace.getLeaf(leafTypeForNewFile);
+			await newLeaf.openFile(newFile);
+		} catch (error) {
+			console.error(`Error creating or opening note at path: ${path}`, error);
+		}
+	}
+
+	private isCursorInsideLink(editor: Editor, clickedLink: ClickedLinkCache): boolean {
+		const cursor = editor.getCursor();
+		const start = clickedLink.position.start;
+		const end = clickedLink.position.end;
+
+		if (cursor.line < start.line || cursor.line > end.line) {
+			console.log("Cursor is outside the link (line mismatch)")
+			return false;
+		}
+
+		if (start.line === end.line) {
+			let isInside = cursor.line === start.line && cursor.ch >= start.col && cursor.ch <= end.col;
+			console.log("Cursor is inside the link (same line):", isInside);
+			return isInside;
+		}
+
+		if (cursor.line === start.line) {
+			let isInside = cursor.ch >= start.col;
+			console.log("Cursor is inside the link (start line):", isInside);
+			return isInside;
+		}
+
+		if (cursor.line === end.line) {
+			let isInside = cursor.ch <= end.col;
+			console.log("Cursor is inside the link (end line):", isInside);
+			return isInside;
+		}
+
+		return true;
+	}
+
+	private moveCursorToLinkStart(editor: Editor, clickedLink: ClickedLinkCache) {
+		const cursorColOffset = clickedLink.original.startsWith("![[") ? 3 : 2;
+		editor.setCursor({
+			line: clickedLink.position.start.line,
+			ch: clickedLink.position.start.col + cursorColOffset,
+		});
+		editor.focus();
 	}
 }
