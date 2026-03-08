@@ -37,6 +37,11 @@ type ClickedLinkCache = {
 	};
 };
 
+type ClickBehavior = {
+	openTarget: PaneType | boolean;
+	canJump: boolean;
+};
+
 const hasPosAtCoords = (
 	editor: Editor,
 ): editor is EditorWithPosAtCoords => {
@@ -105,15 +110,13 @@ export default class BetterLinkClicker extends Plugin {
 		}
 
 		const pos: EditorPosition = editor.offsetToPos(offset);
+		const state = view.getState();
+		const isLivePreview = state.mode === "source" && !state.source;
 
 		const fileCache = this.app.metadataCache.getFileCache(view.file);
-		if (!fileCache?.links && !fileCache?.embeds) {
-			return;
-		}
-
 		const linkCaches: ClickedLinkCache[] = [
-			...((fileCache.links || []) as ClickedLinkCache[]),
-			...((fileCache.embeds || []) as ClickedLinkCache[]),
+			...((fileCache?.links || []) as ClickedLinkCache[]),
+			...((fileCache?.embeds || []) as ClickedLinkCache[]),
 		];
 
 		for (const linkCache of linkCaches) {
@@ -125,8 +128,6 @@ export default class BetterLinkClicker extends Plugin {
 				(pos.line > start.line && pos.line < end.line) ||
 				(isSameLine && pos.ch >= start.col && pos.ch <= end.col)
 			) {
-				const state = view.getState();
-				const isLivePreview = state.mode === "source" && !state.source;
 				await this.processLink(
 					evt,
 					linkCache,
@@ -137,6 +138,15 @@ export default class BetterLinkClicker extends Plugin {
 				return;
 			}
 		}
+
+		const externalLink = this.getExternalMarkdownLinkAtPos(
+			evt,
+			editor,
+			pos,
+		);
+		if (externalLink) {
+			await this.processExternalLink(evt, externalLink, editor, isLivePreview);
+		}
 	}
 
 	private async processLink(
@@ -146,18 +156,7 @@ export default class BetterLinkClicker extends Plugin {
 		editor: Editor,
 		isLivePreview: boolean,
 	) {
-		const modEvent = Keymap.isModEvent(evt);
-		const paneType =
-			typeof modEvent === "string" ? (modEvent as PaneType) : undefined;
-		const openTarget: PaneType | boolean =
-			paneType === "split" || paneType === "window"
-				? paneType
-				: this.settings.openAtNewTab;
-		const forceJumpForWindow = paneType === "window";
-		const canJump =
-			forceJumpForWindow ||
-			!this.settings.jumpOnlyWithModifier !==
-			(Platform.isMacOS ? evt.metaKey : evt.ctrlKey);
+		const { openTarget, canJump } = this.resolveClickBehavior(evt);
 
 		evt.preventDefault();
 		evt.stopPropagation();
@@ -199,6 +198,129 @@ export default class BetterLinkClicker extends Plugin {
 		}
 
 		await this.createAndOpenFile(createPath, openTarget);
+	}
+
+	private async processExternalLink(
+		evt: MouseEvent,
+		clickedLink: ClickedLinkCache,
+		editor: Editor,
+		isLivePreview: boolean,
+	) {
+		const { canJump } = this.resolveClickBehavior(evt);
+
+		evt.preventDefault();
+		evt.stopPropagation();
+
+		if (isLivePreview && this.isCursorInsideLink(editor, clickedLink)) {
+			return;
+		}
+
+		if (!canJump) {
+			this.moveCursorToLinkStart(editor, clickedLink);
+			return;
+		}
+
+		window.open(clickedLink.link, "_blank", "noopener,noreferrer");
+	}
+
+	private resolveClickBehavior(evt: MouseEvent): ClickBehavior {
+		const modEvent = Keymap.isModEvent(evt);
+		const paneType =
+			typeof modEvent === "string" ? (modEvent as PaneType) : undefined;
+		const openTarget: PaneType | boolean =
+			paneType === "split" || paneType === "window"
+				? paneType
+				: this.settings.openAtNewTab;
+		const forceJumpForWindow = paneType === "window";
+		const canJump =
+			forceJumpForWindow ||
+			!this.settings.jumpOnlyWithModifier !==
+			(Platform.isMacOS ? evt.metaKey : evt.ctrlKey);
+
+		return { openTarget, canJump };
+	}
+
+	private getExternalMarkdownLinkAtPos(
+		evt: MouseEvent,
+		editor: Editor,
+		pos: EditorPosition,
+	): ClickedLinkCache | null {
+		const target = evt.target;
+		if (!(target instanceof HTMLElement)) {
+			return null;
+		}
+
+		const markdownLinkEl = target.closest(".cm-link");
+		if (!markdownLinkEl) {
+			return null;
+		}
+
+		const lineText = editor.getLine(pos.line);
+		const hit = this.findMarkdownLinkAtCh(lineText, pos.ch);
+		if (!hit) {
+			return null;
+		}
+
+		const linkTarget = this.extractMarkdownLinkTarget(hit.rawTarget);
+		if (!linkTarget || !this.isExternalLink(linkTarget)) {
+			return null;
+		}
+
+		return {
+			link: linkTarget,
+			original: hit.original,
+			position: {
+				start: { line: pos.line, col: hit.start },
+				end: { line: pos.line, col: hit.end },
+			},
+		};
+	}
+
+	private findMarkdownLinkAtCh(
+		lineText: string,
+		ch: number,
+	): { original: string; rawTarget: string; start: number; end: number } | null {
+		const markdownLinkRegex = /!?\[[^\]]*?\]\(([^)]*)\)/g;
+
+		let match: RegExpExecArray | null;
+		while ((match = markdownLinkRegex.exec(lineText)) !== null) {
+			const start = match.index;
+			const end = start + match[0].length;
+			if (ch >= start && ch <= end) {
+				return {
+					original: match[0],
+					rawTarget: match[1],
+					start,
+					end,
+				};
+			}
+		}
+
+		return null;
+	}
+
+	private extractMarkdownLinkTarget(rawTarget: string): string | null {
+		const trimmed = rawTarget.trim();
+		if (!trimmed) {
+			return null;
+		}
+
+		if (trimmed.startsWith("<")) {
+			const closeIndex = trimmed.indexOf(">");
+			if (closeIndex > 0) {
+				return trimmed.slice(1, closeIndex).trim();
+			}
+		}
+
+		const firstPart = trimmed.split(/\s+/)[0];
+		return firstPart || null;
+	}
+
+	private isExternalLink(linkTarget: string): boolean {
+		return (
+			/^[a-z][a-z0-9+.-]*:/i.test(linkTarget) ||
+			linkTarget.startsWith("//")
+		);
 	}
 
 	private buildNewFilePath(filepath: string, linkTarget: string): string | null {
