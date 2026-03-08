@@ -149,7 +149,10 @@ export default class BetterLinkClicker extends Plugin {
 		const modEvent = Keymap.isModEvent(evt);
 		const paneType =
 			typeof modEvent === "string" ? (modEvent as PaneType) : undefined;
-		const openTarget = paneType ?? this.settings.openAtNewTab;
+		const openTarget: PaneType | boolean =
+			paneType === "split" || paneType === "window"
+				? paneType
+				: this.settings.openAtNewTab;
 		const forceJumpForWindow = paneType === "window";
 		const canJump =
 			forceJumpForWindow ||
@@ -190,12 +193,12 @@ export default class BetterLinkClicker extends Plugin {
 
 		if (this.settings.confirmCreateFile) {
 			new ConfirmationModal(this.app, createPath, () => {
-				void this.createAndOpenFile(createPath, paneType);
+				void this.createAndOpenFile(createPath, openTarget);
 			}).open();
 			return;
 		}
 
-		await this.createAndOpenFile(createPath, paneType);
+		await this.createAndOpenFile(createPath, openTarget);
 	}
 
 	private buildNewFilePath(filepath: string, linkTarget: string): string | null {
@@ -225,8 +228,16 @@ export default class BetterLinkClicker extends Plugin {
 		return `${newFileLocation}${linkTarget}.md`;
 	}
 
-	private async createAndOpenFile(path: string, paneType?: PaneType) {
-		const leafTypeForNewFile = paneType ?? "tab";
+	private async createAndOpenFile(
+		path: string,
+		openTarget: PaneType | boolean,
+	) {
+		const leafTypeForNewFile: PaneType | boolean =
+			openTarget === "split" || openTarget === "window"
+				? openTarget
+				: openTarget === true
+					? "tab"
+					: false;
 		try {
 			const newFile = await this.app.vault.create(path, "");
 			const newLeaf = this.app.workspace.getLeaf(leafTypeForNewFile);
