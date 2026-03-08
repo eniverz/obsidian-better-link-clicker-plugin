@@ -253,25 +253,21 @@ export default class BetterLinkClicker extends Plugin {
 		const end = clickedLink.position.end;
 
 		if (cursor.line < start.line || cursor.line > end.line) {
-			console.log("Cursor is outside the link (line mismatch)")
 			return false;
 		}
 
 		if (start.line === end.line) {
 			let isInside = cursor.line === start.line && cursor.ch >= start.col && cursor.ch <= end.col;
-			console.log("Cursor is inside the link (same line):", isInside);
 			return isInside;
 		}
 
 		if (cursor.line === start.line) {
 			let isInside = cursor.ch >= start.col;
-			console.log("Cursor is inside the link (start line):", isInside);
 			return isInside;
 		}
 
 		if (cursor.line === end.line) {
 			let isInside = cursor.ch <= end.col;
-			console.log("Cursor is inside the link (end line):", isInside);
 			return isInside;
 		}
 
