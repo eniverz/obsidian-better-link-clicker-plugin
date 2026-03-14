@@ -146,6 +146,17 @@ export default class BetterLinkClicker extends Plugin {
 		);
 		if (externalLink) {
 			await this.processExternalLink(evt, externalLink, editor, isLivePreview);
+			return;
+		}
+
+		const plainExternalUrl = this.getPlainExternalUrlAtPos(evt, editor, pos);
+		if (plainExternalUrl) {
+			await this.processExternalLink(
+				evt,
+				plainExternalUrl,
+				editor,
+				isLivePreview,
+			);
 		}
 	}
 
@@ -276,6 +287,37 @@ export default class BetterLinkClicker extends Plugin {
 		};
 	}
 
+	private getPlainExternalUrlAtPos(
+		evt: MouseEvent,
+		editor: Editor,
+		pos: EditorPosition,
+	): ClickedLinkCache | null {
+		const target = evt.target;
+		if (!(target instanceof HTMLElement)) {
+			return null;
+		}
+
+		const urlEl = target.closest(".cm-url");
+		if (!urlEl) {
+			return null;
+		}
+
+		const lineText = editor.getLine(pos.line);
+		const hit = this.findPlainExternalUrlAtCh(lineText, pos.ch);
+		if (!hit) {
+			return null;
+		}
+
+		return {
+			link: hit.url,
+			original: hit.url,
+			position: {
+				start: { line: pos.line, col: hit.start },
+				end: { line: pos.line, col: hit.end },
+			},
+		};
+	}
+
 	private findMarkdownLinkAtCh(
 		lineText: string,
 		ch: number,
@@ -290,6 +332,33 @@ export default class BetterLinkClicker extends Plugin {
 				return {
 					original: match[0],
 					rawTarget: match[1],
+					start,
+					end,
+				};
+			}
+		}
+
+		return null;
+	}
+
+	private findPlainExternalUrlAtCh(
+		lineText: string,
+		ch: number,
+	): { url: string; start: number; end: number } | null {
+		const urlRegex = /(?:[a-z][a-z0-9+.-]*:|\/\/)[^\s<>()\[\]{}"']+/gi;
+
+		let match: RegExpExecArray | null;
+		while ((match = urlRegex.exec(lineText)) !== null) {
+			const normalizedUrl = this.trimTrailingUrlPunctuation(match[0]);
+			if (!normalizedUrl || !this.isExternalLink(normalizedUrl)) {
+				continue;
+			}
+
+			const start = match.index;
+			const end = start + normalizedUrl.length;
+			if (ch >= start && ch <= end) {
+				return {
+					url: normalizedUrl,
 					start,
 					end,
 				};
@@ -314,6 +383,10 @@ export default class BetterLinkClicker extends Plugin {
 
 		const firstPart = trimmed.split(/\s+/)[0];
 		return firstPart || null;
+	}
+
+	private trimTrailingUrlPunctuation(url: string): string {
+		return url.replace(/[.,!?;:]+$/g, "");
 	}
 
 	private isExternalLink(linkTarget: string): boolean {
@@ -397,7 +470,11 @@ export default class BetterLinkClicker extends Plugin {
 	}
 
 	private moveCursorToLinkStart(editor: Editor, clickedLink: ClickedLinkCache) {
-		const cursorColOffset = clickedLink.original.startsWith("![[") ? 3 : 2;
+		const cursorColOffset = clickedLink.original.startsWith("![[")
+			? 3
+			: clickedLink.original.startsWith("[[")
+				? 2
+				: 0;
 		editor.setCursor({
 			line: clickedLink.position.start.line,
 			ch: clickedLink.position.start.col + cursorColOffset,
