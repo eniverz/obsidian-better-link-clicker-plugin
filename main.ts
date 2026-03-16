@@ -172,12 +172,10 @@ export default class BetterLinkClicker extends Plugin {
 		evt.preventDefault();
 		evt.stopPropagation();
 
-		if (isLivePreview && this.isCursorInsideLink(editor, clickedLink)) {
-			// this.moveCursorToLinkStart(editor, clickedLink);
-			return;
-		}
-
 		if (!canJump) {
+			if (isLivePreview && this.isCursorInsideLink(editor, clickedLink)) {
+				return;
+			}
 			this.moveCursorToLinkStart(editor, clickedLink);
 			return;
 		}
@@ -222,11 +220,10 @@ export default class BetterLinkClicker extends Plugin {
 		evt.preventDefault();
 		evt.stopPropagation();
 
-		if (isLivePreview && this.isCursorInsideLink(editor, clickedLink)) {
-			return;
-		}
-
 		if (!canJump) {
+			if (isLivePreview && this.isCursorInsideLink(editor, clickedLink)) {
+				return;
+			}
 			this.moveCursorToLinkStart(editor, clickedLink);
 			return;
 		}
