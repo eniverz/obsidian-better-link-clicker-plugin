@@ -96,6 +96,9 @@ export default class BetterLinkClicker extends Plugin {
 		}
 
 		const editor = view.editor;
+		if (!editor) {
+			return;
+		}
 
 		if (!hasPosAtCoords(editor)) {
 			return;
@@ -103,6 +106,7 @@ export default class BetterLinkClicker extends Plugin {
 
 		const cm = editor.cm;
 		if (!cm) return;
+		this.interceptRenderedAnchorDefaultClick(evt, view);
 
 		const offset = cm.posAtCoords({ x: evt.clientX, y: evt.clientY });
 		if (offset === null) {
@@ -158,6 +162,27 @@ export default class BetterLinkClicker extends Plugin {
 				isLivePreview,
 			);
 		}
+	}
+
+	private interceptRenderedAnchorDefaultClick(
+		evt: MouseEvent,
+		view: MarkdownView,
+	): void {
+		const target = evt.target;
+		if (!(target instanceof HTMLElement)) {
+			return;
+		}
+
+		const anchor = target.closest("a");
+		if (!anchor) {
+			return;
+		}
+		if (!view.containerEl.contains(anchor)) {
+			return;
+		}
+
+		evt.preventDefault();
+		evt.stopPropagation();
 	}
 
 	private async processLink(
