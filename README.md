@@ -16,7 +16,7 @@ When you use Obsidian's modifier-click behavior to open a link in another pane (
 
 ## Supported link types
 
-The plugin currently handles the following link syntaxes in the editor (especially Live Preview):
+The plugin currently handles the following link syntaxes in the editor (especially Live Preview tokenized text):
 
 | Type | Syntax examples | Supported |
 | --- | --- | --- |
@@ -25,6 +25,7 @@ The plugin currently handles the following link syntaxes in the editor (especial
 | Markdown link to internal target | `[PyTorch](PyTorch)`, `[Doc](folder/Doc.md#section)` | Yes |
 | Markdown link to external URL | `[GitHub](https://github.com)`, `[Mail](mailto:test@example.com)` | Yes |
 | Plain URL text | `https://github.com`, `mailto:test@example.com`, `//example.com` | Yes |
+| Callout links rendered as `<a>` in Live Preview | <code>> [!tip] Title<br>> [[link]]</code> | Todo |
 
 ### Behavior notes
 
