@@ -1,5 +1,6 @@
 import {
 	Plugin,
+	Component,
 	MarkdownView,
 	EditorPosition,
 	TFile,
@@ -65,15 +66,35 @@ export default class BetterLinkClicker extends Plugin {
 	settings: BLCSettings;
 
 	async onload() {
+		console.log("Loading Better Link Clicker plugin version 1.3.3");
 		await this.loadSettings();
 		this.addSettingTab(new BLCSettingTab(this.app, this));
 
-		this.registerDomEvent(
-			document,
-			"click",
-			this.handleLinkClick.bind(this),
-			{ capture: true },
+		const windowListeners = new Map<Document, Component>();
+		const registerDocument = (doc: Document) => {
+			if (windowListeners.has(doc)) return;
+			const listener = this.addChild(new Component());
+			listener.registerDomEvent(doc, "click", this.handleLinkClick.bind(this), {
+				capture: true,
+			});
+			windowListeners.set(doc, listener);
+		};
+		const workspace = this.app.workspace;
+		this.registerEvent(
+			workspace.on("window-open", (win) => registerDocument(win.doc)),
 		);
+		this.registerEvent(
+			workspace.on("window-close", (win) => {
+				const listener = windowListeners.get(win.doc);
+				if (listener) {
+					this.removeChild(listener);
+					windowListeners.delete(win.doc);
+				}
+			}),
+		);
+		this.register(() => windowListeners.clear());
+		registerDocument(workspace.containerEl.doc);
+		workspace.iterateAllLeaves((leaf) => registerDocument(leaf.getContainer().doc));
 		console.debug("Better Link Clicker loaded");
 	}
 
@@ -93,13 +114,18 @@ export default class BetterLinkClicker extends Plugin {
 		// Rendered images own their selection, zoom, edit and resize interactions.
 		// Use Element rather than HTMLElement so SVG icons inside the actions
 		// also reach Obsidian's handlers before any link interception occurs.
-		const target = evt.target;
-		if (target instanceof Element && target.closest(".image-embed")) {
+		const target = evt.targetNode;
+		if (!target) return;
+		if (target.instanceOf(Element) && target.closest(".image-embed")) {
 			return;
 		}
 
-		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-		if (!view || !view.file) {
+		// Capture runs before focus changes, so resolve the view from the clicked node.
+		const leaf = this.app.workspace.getLeavesOfType("markdown").find(
+			(leaf) => leaf.view.containerEl.contains(target),
+		);
+		const view = leaf?.view;
+		if (!(view instanceof MarkdownView) || !view.file) {
 			return;
 		}
 
@@ -176,8 +202,8 @@ export default class BetterLinkClicker extends Plugin {
 		evt: MouseEvent,
 		view: MarkdownView,
 	): void {
-		const target = evt.target;
-		if (!(target instanceof HTMLElement)) {
+		const target = evt.targetNode;
+		if (!target?.instanceOf(HTMLElement)) {
 			return;
 		}
 
@@ -261,13 +287,13 @@ export default class BetterLinkClicker extends Plugin {
 			return;
 		}
 
-		window.open(clickedLink.link, "_blank", "noopener,noreferrer");
+		evt.win.open(clickedLink.link, "_blank", "noopener,noreferrer");
 	}
 
 	private resolveClickBehavior(evt: MouseEvent): ClickBehavior {
 		const modEvent = Keymap.isModEvent(evt);
 		const paneType =
-			typeof modEvent === "string" ? (modEvent as PaneType) : undefined;
+			typeof modEvent === "string" ? modEvent : undefined;
 		const openTarget: PaneType | boolean =
 			paneType === "split" || paneType === "window"
 				? paneType
@@ -286,8 +312,8 @@ export default class BetterLinkClicker extends Plugin {
 		editor: Editor,
 		pos: EditorPosition,
 	): ClickedLinkCache | null {
-		const target = evt.target;
-		if (!(target instanceof HTMLElement)) {
+		const target = evt.targetNode;
+		if (!target?.instanceOf(HTMLElement)) {
 			return null;
 		}
 
@@ -322,8 +348,8 @@ export default class BetterLinkClicker extends Plugin {
 		editor: Editor,
 		pos: EditorPosition,
 	): ClickedLinkCache | null {
-		const target = evt.target;
-		if (!(target instanceof HTMLElement)) {
+		const target = evt.targetNode;
+		if (!target?.instanceOf(HTMLElement)) {
 			return null;
 		}
 
@@ -375,7 +401,7 @@ export default class BetterLinkClicker extends Plugin {
 		lineText: string,
 		ch: number,
 	): { url: string; start: number; end: number } | null {
-		const urlRegex = /(?:[a-z][a-z0-9+.-]*:|\/\/)[^\s<>()\[\]{}"']+/gi;
+		const urlRegex = /(?:[a-z][a-z0-9+.-]*:|\/\/)[^\s<>()[\]{}"']+/gi;
 
 		let match: RegExpExecArray | null;
 		while ((match = urlRegex.exec(lineText)) !== null) {
