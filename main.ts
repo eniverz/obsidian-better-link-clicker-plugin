@@ -90,6 +90,14 @@ export default class BetterLinkClicker extends Plugin {
 	}
 
 	private async handleLinkClick(evt: MouseEvent) {
+		// Rendered images own their selection, zoom, edit and resize interactions.
+		// Use Element rather than HTMLElement so SVG icons inside the actions
+		// also reach Obsidian's handlers before any link interception occurs.
+		const target = evt.target;
+		if (target instanceof Element && target.closest(".image-embed")) {
+			return;
+		}
+
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		if (!view || !view.file) {
 			return;

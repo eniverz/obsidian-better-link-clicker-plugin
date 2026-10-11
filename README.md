@@ -30,5 +30,6 @@ The plugin currently handles the following link syntaxes in the editor (especial
 ### Behavior notes
 
 - `Jump only with modifier` applies to all handled link types above.
+- Rendered image embeds keep Obsidian's native click behavior, including selection, zoom, editing, resizing, and modifier clicks. The plugin still handles image embed syntax when displayed as editable text.
 - `Open link at new tab` only applies to internal note navigation.
 - External URLs always open as external links (system/browser behavior), not as Obsidian internal tabs.
