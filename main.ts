@@ -66,7 +66,6 @@ export default class BetterLinkClicker extends Plugin {
 	settings: BLCSettings;
 
 	async onload() {
-		console.log("Loading Better Link Clicker plugin version 1.3.3");
 		await this.loadSettings();
 		this.addSettingTab(new BLCSettingTab(this.app, this));
 
@@ -95,7 +94,6 @@ export default class BetterLinkClicker extends Plugin {
 		this.register(() => windowListeners.clear());
 		registerDocument(workspace.containerEl.doc);
 		workspace.iterateAllLeaves((leaf) => registerDocument(leaf.getContainer().doc));
-		console.debug("Better Link Clicker loaded");
 	}
 
 	async loadSettings() {

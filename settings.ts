@@ -1,4 +1,5 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
+import type { SettingDefinitionItem } from "obsidian";
 import BetterLinkClicker from "./main";
 
 export interface BLCSettings {
@@ -20,6 +21,27 @@ export class BLCSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
+	getSettingDefinitions(): SettingDefinitionItem<keyof BLCSettings>[] {
+		return [
+			{
+				name: "Jump only with modifier",
+				desc: "If enabled, you need to hold ctrl (or cmd on mac) while clicking a link to jump to it. Otherwise, clicking a link will open it in a new pane.",
+				control: { type: "toggle", key: "jumpOnlyWithModifier" },
+			},
+			{
+				name: "Confirm file creation",
+				desc: "If enabled, a dialog will pop up to confirm creating a new note when you ctrl/cmd-click a link to a non-existent note.",
+				control: { type: "toggle", key: "confirmCreateFile" },
+			},
+			{
+				name: "Open link at new tab",
+				desc: "If enabled, the note will open in a new tab instead of the current one when you ctrl/cmd-click a link.",
+				control: { type: "toggle", key: "openAtNewTab" },
+			},
+		];
+	}
+
+	// Obsidian before 1.13 uses display(); newer versions use the definitions above.
 	display(): void {
 		const { containerEl } = this;
 
